@@ -5,11 +5,13 @@ import {
   Sun, Moon, Monitor, Check, Save, CheckCircle2,
   BarChart2, FileOutput, AlertTriangle,
   Shield, Edit2, Trash2, Plus, Info, RefreshCcw, Coins, Scale, Settings as SettingsIcon, Globe, FileText,
-  PieChart, Search, Download, ChevronLeft, ChevronRight, Calendar, Users, Zap, LineChart, Filter
+  PieChart, Search, Download, ChevronLeft, ChevronRight, Calendar, Users, Zap, LineChart, Filter,
+  Eye, EyeOff
 } from "lucide-react";
 import UserHeader from "../components/UserHeader";
 import { useTheme } from "../context/ThemeContext";
 import { useLanguage } from "../context/LanguageContext";
+import { useUser } from "../context/UserContext";
 
 // ── Defaults ─────────────────────────────────────────────────────────────────
 const DEFAULT_PROFILE    = { fullName: "", email: "", role: "Legal Team Member", phone: "", company: "", bio: "" };
@@ -60,9 +62,33 @@ function Toggle({ checked, onChange }) {
 // ── Section components (each has its own hooks) ───────────────────────────────
 
 function ProfileSection({ profile, appearance, save }) {
-  const [draft, setDraft] = useState({ ...profile });
+  const { user, updateUser } = useUser();
+  const [draft, setDraft] = useState(() => ({
+    fullName: profile?.fullName || user?.fullName || user?.name || "",
+    email: profile?.email || user?.email || "",
+    role: profile?.role || user?.role || "Legal Team Member",
+    phone: profile?.phone || user?.phone || "",
+    company: profile?.company || user?.company || "",
+    bio: profile?.bio || user?.bio || "",
+  }));
   const { setTheme } = useTheme();
   const { t } = useLanguage();
+
+  const handleSave = () => {
+    save("settings_profile", draft, "Profile saved successfully!");
+    if (updateUser) {
+      updateUser({
+        name: draft.fullName,
+        fullName: draft.fullName,
+        email: draft.email,
+        role: draft.role,
+        phone: draft.phone,
+        company: draft.company,
+        bio: draft.bio,
+      });
+    }
+  };
+
   return (
     <div className="flex flex-col lg:flex-row gap-6">
       <div className="flex-1 bg-white dark:bg-[#1e293b] rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm p-6">
@@ -120,7 +146,7 @@ function ProfileSection({ profile, appearance, save }) {
         </div>
         <div className="mt-5 pt-5 border-t border-slate-100 dark:border-slate-800">
           <button
-            onClick={() => save("settings_profile", draft, "Profile saved successfully!")}
+            onClick={handleSave}
             className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-bold hover:bg-blue-700 transition-colors"
           >
             <Save size={15} /> Save Changes
@@ -180,28 +206,57 @@ function ProfileSection({ profile, appearance, save }) {
 
 function SecuritySection({ showToast }) {
   const [sec, setSec] = useState({ current: "", newPw: "", confirm: "" });
+  const [showPw, setShowPw] = useState({ current: false, newPw: false, confirm: false });
+
+  const toggleShow = (key) => {
+    setShowPw((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const fields = [
+    { label: "Current Password", key: "current" },
+    { label: "New Password", key: "newPw" },
+    { label: "Confirm Password", key: "confirm" },
+  ];
+
   return (
     <div className="bg-white dark:bg-[#1e293b] rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm p-6 max-w-xl">
       <h2 className="text-base font-bold text-slate-900 dark:text-slate-50 mb-5">Change Password</h2>
-      {[{ label:"Current Password", key:"current" }, { label:"New Password", key:"newPw" }, { label:"Confirm Password", key:"confirm" }].map((f) => (
+      {fields.map((f) => (
         <div key={f.key} className="mb-4">
-          <label className="text-xs font-semibold text-slate-500 block mb-1.5">{f.label}</label>
-          <input
-            type="password"
-            value={sec[f.key]}
-            onChange={(e) => setSec({ ...sec, [f.key]: e.target.value })}
-            placeholder="••••••••"
-            className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg text-sm focus:outline-none focus:border-blue-500"
-          />
+          <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 block mb-1.5">{f.label}</label>
+          <div className="relative flex items-center">
+            <input
+              type={showPw[f.key] ? "text" : "password"}
+              value={sec[f.key]}
+              onChange={(e) => setSec({ ...sec, [f.key]: e.target.value })}
+              placeholder="••••••••"
+              className="w-full px-3 py-2 pr-10 border border-slate-200 dark:border-slate-700 rounded-lg text-sm focus:outline-none focus:border-blue-500 bg-white dark:bg-[#1e293b] text-slate-800 dark:text-slate-100 placeholder-slate-400 transition-colors"
+            />
+            <button
+              type="button"
+              onClick={() => toggleShow(f.key)}
+              className="absolute right-3 p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors focus:outline-none"
+              title={showPw[f.key] ? "Hide password" : "Show password"}
+            >
+              {showPw[f.key] ? <EyeOff size={16} /> : <Eye size={16} />}
+            </button>
+          </div>
         </div>
       ))}
       <button
         onClick={() => {
-          if (sec.newPw !== sec.confirm) { showToast("Passwords do not match!"); return; }
+          if (!sec.current || !sec.newPw || !sec.confirm) {
+            showToast("Please fill in all password fields!");
+            return;
+          }
+          if (sec.newPw !== sec.confirm) {
+            showToast("Passwords do not match!");
+            return;
+          }
           showToast("Password updated successfully!");
           setSec({ current: "", newPw: "", confirm: "" });
         }}
-        className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-bold hover:bg-blue-700 transition-colors"
+        className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-bold hover:bg-blue-700 transition-colors mt-2"
       >
         <Lock size={15} /> Update Password
       </button>
@@ -766,10 +821,25 @@ function RiskSettingsSection({ showToast }) {
 
 // ── Main Component ────────────────────────────────────────────────────────────
 export default function SettingsPage() {
+  const { user } = useUser();
   const [activeSection, setActiveSection] = useState("profile");
   const [toast, setToast] = useState("");
 
-  const [profile,    setProfile]    = useState(() => JSON.parse(localStorage.getItem("settings_profile")    || "null") || DEFAULT_PROFILE);
+  const [profile,    setProfile]    = useState(() => {
+    const saved = JSON.parse(localStorage.getItem("settings_profile") || "null");
+    if (saved && (saved.fullName || saved.email)) return saved;
+    if (user) {
+      return {
+        fullName: user.fullName || user.name || "",
+        email: user.email || "",
+        role: user.role || "Legal Team Member",
+        phone: user.phone || "",
+        company: user.company || "",
+        bio: user.bio || "",
+      };
+    }
+    return DEFAULT_PROFILE;
+  });
   const [prefs,      setPrefs]      = useState(() => JSON.parse(localStorage.getItem("settings_prefs")      || "null") || DEFAULT_PREFS);
   const [appearance, setAppearance] = useState(() => JSON.parse(localStorage.getItem("settings_appearance") || "null") || DEFAULT_APPEARANCE);
   const [notifs,     setNotifs]     = useState(() => JSON.parse(localStorage.getItem("settings_notifs")     || "null") || DEFAULT_NOTIFS);

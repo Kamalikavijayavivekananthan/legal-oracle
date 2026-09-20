@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Mail, Lock, ArrowRight, CheckCircle2, AlertCircle, User } from "lucide-react";
+import { Mail, Lock, ArrowRight, CheckCircle2, AlertCircle, User, Eye, EyeOff } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useUser } from "../context/UserContext";
 
@@ -7,6 +7,7 @@ export default function LoginPage({ onLogin }) {
   const [username, setUsername] = useState("");
   const [email, setEmail]       = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError]         = useState("");
   const [showForm, setShowForm]   = useState(false);
@@ -41,8 +42,9 @@ export default function LoginPage({ onLogin }) {
       // Save user info to context + localStorage
       login({
         name:  username,
+        fullName: username,
         email: email,
-        role:  "Legal Team",
+        role:  "Legal Team Member",
       });
       onLogin();
       navigate("/");
@@ -147,18 +149,26 @@ export default function LoginPage({ onLogin }) {
                   <label className="block text-sm font-semibold text-slate-300">Password</label>
                   <a href="#" className="text-xs font-medium text-blue-400 hover:text-blue-300 transition-colors">Forgot password?</a>
                 </div>
-                <div className="relative group">
+                <div className="relative group flex items-center">
                   <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none transition-colors group-focus-within:text-blue-400 text-slate-500">
                     <Lock size={20} />
                   </div>
                   <input 
-                    type="password" 
+                    type={showPassword ? "text" : "password"} 
                     required
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="w-full bg-[#0B1120]/50 border border-slate-700/80 rounded-xl py-3.5 pl-12 pr-4 text-slate-100 placeholder-slate-500/80 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all hover:border-slate-600 shadow-inner"
+                    className="w-full bg-[#0B1120]/50 border border-slate-700/80 rounded-xl py-3.5 pl-12 pr-12 text-slate-100 placeholder-slate-500/80 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all hover:border-slate-600 shadow-inner"
                     placeholder="••••••••"
                   />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-4 text-slate-400 hover:text-slate-200 transition-colors focus:outline-none"
+                    title={showPassword ? "Hide password" : "Show password"}
+                  >
+                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
                 </div>
               </div>
 

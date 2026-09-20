@@ -11,9 +11,9 @@ export default function UserHeader() {
   const [showNotifs, setShowNotifs] = useState(false);
   const notifRef = useRef(null);
 
-  const displayName = user?.name || "User";
-  const role        = user?.role || "Legal Team";
-  const initial     = displayName.charAt(0).toUpperCase();
+  const displayName = user?.fullName || user?.name || "User";
+  const role        = user?.role || "Legal Team Member";
+  const initial     = displayName ? displayName.charAt(0).toUpperCase() : "U";
 
   // Close dropdown when clicking outside
   useEffect(() => {
