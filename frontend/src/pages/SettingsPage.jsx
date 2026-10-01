@@ -69,6 +69,7 @@ function ProfileSection({ profile, appearance, save }) {
     role: profile?.role || user?.role || "Legal Team Member",
     phone: profile?.phone || user?.phone || "",
     company: profile?.company || user?.company || "",
+    experience: profile?.experience || user?.experience || "",
     bio: profile?.bio || user?.bio || "",
   }));
   const { setTheme } = useTheme();
@@ -84,6 +85,7 @@ function ProfileSection({ profile, appearance, save }) {
         role: draft.role,
         phone: draft.phone,
         company: draft.company,
+        experience: draft.experience,
         bio: draft.bio,
       });
     }
@@ -109,6 +111,7 @@ function ProfileSection({ profile, appearance, save }) {
             { label: t("Email Address"),key: "email",    type: "email", placeholder: "your@email.com" },
             { label: t("Phone Number"), key: "phone",    type: "tel",   placeholder: "+91 98765 43210" },
             { label: t("Company"),      key: "company",  type: "text",  placeholder: "Your company name" },
+            { label: t("Experience"),   key: "experience", type: "text", placeholder: "e.g. 3-5 years (Mid-Level)" },
           ].map((f) => (
             <div key={f.key}>
               <label className="text-xs font-semibold text-slate-500 block mb-1.5">{f.label}</label>

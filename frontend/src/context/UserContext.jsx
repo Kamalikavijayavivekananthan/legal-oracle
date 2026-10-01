@@ -16,6 +16,7 @@ export function UserProvider({ children }) {
           role: savedProfile.role || savedUser?.role || "Legal Team Member",
           phone: savedProfile.phone || savedUser?.phone || "",
           company: savedProfile.company || savedUser?.company || "",
+          experience: savedProfile.experience || savedUser?.experience || "",
           bio: savedProfile.bio || savedUser?.bio || "",
         };
       }
@@ -26,6 +27,8 @@ export function UserProvider({ children }) {
           fullName: savedUser.fullName || savedUser.name || "User",
           name: savedUser.name || savedUser.fullName || "User",
           role: savedUser.role || "Legal Team Member",
+          company: savedUser.company || "",
+          experience: savedUser.experience || "",
         };
       }
     } catch (e) {
@@ -38,6 +41,7 @@ export function UserProvider({ children }) {
       role: "Legal Team Member",
       phone: "",
       company: "",
+      experience: "",
       bio: "",
     };
   });
@@ -48,6 +52,8 @@ export function UserProvider({ children }) {
       name: userData.name || userData.fullName || "User",
       fullName: userData.fullName || userData.name || "User",
       role: userData.role || "Legal Team Member",
+      company: userData.company || "",
+      experience: userData.experience || "",
     };
     localStorage.setItem("legaloracle_user", JSON.stringify(formattedUser));
 
@@ -57,6 +63,8 @@ export function UserProvider({ children }) {
       fullName: formattedUser.name,
       email: formattedUser.email || savedProfile.email || "",
       role: formattedUser.role || savedProfile.role || "Legal Team Member",
+      company: formattedUser.company || savedProfile.company || "",
+      experience: formattedUser.experience || savedProfile.experience || "",
     };
     localStorage.setItem("settings_profile", JSON.stringify(updatedProfile));
 
@@ -82,6 +90,7 @@ export function UserProvider({ children }) {
         role: updated.role,
         phone: updated.phone || "",
         company: updated.company || "",
+        experience: updated.experience || "",
         bio: updated.bio || "",
       };
       localStorage.setItem("settings_profile", JSON.stringify(profileData));

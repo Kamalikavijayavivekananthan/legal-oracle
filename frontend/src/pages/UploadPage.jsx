@@ -1,15 +1,18 @@
 import { useState } from "react";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
-import { UploadCloud, File, X, Loader2, CheckCircle2, AlertCircle, HelpCircle, Lock } from "lucide-react";
+import { UploadCloud, File, X, Loader2, CheckCircle2, AlertCircle, HelpCircle, Lock, Sparkles, ArrowRight } from "lucide-react";
 
 export default function UploadPage({ setGlobalResults }) {
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [analysisStep, setAnalysisStep] = useState("");
   const navigate = useNavigate();
 
   const handleFileChange = (e) => {
-    setFiles([...files, ...Array.from(e.target.files)]);
+    if (e.target.files) {
+      setFiles((prev) => [...prev, ...Array.from(e.target.files)]);
+    }
   };
 
   const removeFile = (index) => {
@@ -22,25 +25,36 @@ export default function UploadPage({ setGlobalResults }) {
       return;
     }
     setLoading(true);
+    setAnalysisStep("Uploading documents...");
     
     const formData = new FormData();
     files.forEach((f) => formData.append("files", f));
 
     try {
-      console.log("Sending request to backend...");
+      setAnalysisStep("Extracting text & splitting clauses...");
+      
       const response = await axios.post("/api-backend/upload-contracts", formData, {
         headers: {
           'Content-Type': 'multipart/form-data'
         }
       });
-      console.log("Response received:", response.data);
-      setGlobalResults(response.data);
-      navigate("/results");
+
+      setAnalysisStep("Analyzing contradictions with Groq AI...");
+      
+      if (response.data) {
+        setGlobalResults(response.data);
+        setAnalysisStep("Analysis Complete! Redirecting to Results...");
+        
+        // Immediate automatic navigation to results page
+        setTimeout(() => {
+          navigate("/results");
+        }, 400);
+      }
     } catch (error) {
       console.error("Upload error details:", error);
-      alert(`Analysis Failed: ${error.message || "Could not connect to server"}`);
-    } finally {
+      alert(`Analysis Failed: ${error.response?.data?.message || error.message || "Could not connect to server"}`);
       setLoading(false);
+      setAnalysisStep("");
     }
   };
 
@@ -141,12 +155,22 @@ export default function UploadPage({ setGlobalResults }) {
             <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100 mb-2">3. Start Analysis</h2>
             <p className="text-sm font-medium text-slate-500 mb-6">Click the button below to analyze uploaded contracts and detect contradictions.</p>
             
+            {loading && (
+              <div className="mb-6 p-4 rounded-xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 flex items-center gap-3">
+                <Loader2 size={20} className="animate-spin text-blue-600 dark:text-blue-400 shrink-0" />
+                <div>
+                  <p className="text-sm font-bold text-blue-900 dark:text-blue-200">{analysisStep}</p>
+                  <p className="text-xs text-blue-600 dark:text-blue-400">Processing with Groq AI engine...</p>
+                </div>
+              </div>
+            )}
+
             <button 
               onClick={handleUpload} 
               disabled={loading}
               className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-lg font-bold flex items-center gap-3 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
             >
-              {loading ? <Loader2 size={18} className="animate-spin" /> : <UploadCloud size={18} />}
+              {loading ? <Loader2 size={18} className="animate-spin" /> : <Sparkles size={18} />}
               {loading ? "Analyzing Contracts..." : "Analyze Contracts"}
             </button>
             <div className="mt-4 flex items-center gap-2 text-xs font-medium text-slate-500">

@@ -1,3 +1,4 @@
+import React, { useState, useEffect } from "react";
 import { 
   FileText, ShieldCheck, AlertTriangle, BarChart2, 
   ChevronRight, Calendar, UploadCloud, CheckCircle2, FileDown 
@@ -8,21 +9,58 @@ import UserHeader from "../components/UserHeader";
 
 export default function DashboardHome({ globalResults }) {
   const navigate = useNavigate();
+  const [savedReports, setSavedReports] = useState([]);
 
-  // Compute dynamic stats
+  // Load saved reports from localStorage and listen to updates
+  useEffect(() => {
+    const loadReports = () => {
+      try {
+        const stored = JSON.parse(localStorage.getItem("savedReports") || "[]");
+        setSavedReports(stored);
+      } catch (e) {
+        setSavedReports([]);
+      }
+    };
+
+    loadReports();
+    window.addEventListener("storage", loadReports);
+    return () => window.removeEventListener("storage", loadReports);
+  }, []);
+
+  // Compute stats from active analysis results
   const results = globalResults?.results || [];
   
-  const totalContracts = globalResults?.total_contracts || 0;
-  const contradictionsFound = globalResults?.contradictions_found || 0;
-  const highRiskCount = results.filter(r => r.risk_level === "HIGH").length;
-  const mediumRiskCount = results.filter(r => r.risk_level === "MEDIUM").length;
-  const lowRiskCount = results.filter(r => r.risk_level === "LOW").length;
+  // Total contracts analyzed
+  const globalContracts = globalResults?.total_contracts || 0;
+  const reportsContracts = savedReports.reduce((acc, r) => acc + (Number(r.contracts) || 2), 0);
+  const totalContracts = globalContracts > 0 ? globalContracts : reportsContracts;
+
+  // Total contradictions found
+  const globalContradictions = globalResults?.contradictions_found || 0;
+  const reportsContradictions = savedReports.reduce((acc, r) => acc + (Number(r.contradictions) || 0), 0);
+  const contradictionsFound = globalContradictions > 0 ? globalContradictions : reportsContradictions;
+
+  // Risk counts
+  const resultsHigh = results.filter(r => r.risk_level === "HIGH").length;
+  const resultsMed  = results.filter(r => r.risk_level === "MEDIUM").length;
+  const resultsLow  = results.filter(r => r.risk_level === "LOW").length;
+
+  const reportsHigh = savedReports.reduce((acc, r) => acc + (Number(r.risk?.high) || 0), 0);
+  const reportsMed  = savedReports.reduce((acc, r) => acc + (Number(r.risk?.medium) || 0), 0);
+  const reportsLow  = savedReports.reduce((acc, r) => acc + (Number(r.risk?.low) || 0), 0);
+
+  const highRiskCount   = results.length > 0 ? resultsHigh : reportsHigh;
+  const mediumRiskCount = results.length > 0 ? resultsMed  : reportsMed;
+  const lowRiskCount    = results.length > 0 ? resultsLow  : reportsLow;
+
+  // Reports generated count
+  const reportsGenerated = Math.max(savedReports.length, globalResults ? 1 : 0);
 
   const kpis = [
     { title: "Contracts Analyzed", value: totalContracts, subtitle: "Total uploaded contracts", icon: <FileText size={24} className="text-blue-600" />, bg: "bg-blue-50" },
     { title: "Contradictions Found", value: contradictionsFound, subtitle: "Across all contracts", icon: <ShieldCheck size={24} className="text-green-600" />, bg: "bg-green-50" },
     { title: "High Risk Issues", value: highRiskCount, subtitle: "Require immediate attention", icon: <AlertTriangle size={24} className="text-red-600" />, bg: "bg-red-50" },
-    { title: "Reports Generated", value: globalResults ? 1 : 0, subtitle: "Downloadable reports", icon: <BarChart2 size={24} className="text-amber-600" />, bg: "bg-amber-50" },
+    { title: "Reports Generated", value: reportsGenerated, subtitle: "Downloadable reports", icon: <BarChart2 size={24} className="text-amber-600" />, bg: "bg-amber-50" },
   ];
 
   const pieData = [
@@ -31,11 +69,25 @@ export default function DashboardHome({ globalResults }) {
     { name: "Low Risk", value: lowRiskCount, color: "#22c55e" },
   ].filter(d => d.value > 0);
 
-  // Use dummy activity for now but conditionally show based on if we have results
-  const activities = globalResults ? [
-    { title: "Contracts Uploaded", desc: `${totalContracts} files uploaded for analysis`, time: "Just now", icon: <UploadCloud size={16} className="text-white" />, color: "bg-blue-600" },
-    { title: "Analysis Completed", desc: "Contradictions detected successfully", time: "Just now", icon: <CheckCircle2 size={16} className="text-white" />, color: "bg-green-500" },
-  ] : [];
+  // Dynamic recent activities
+  let activities = [];
+  if (globalResults) {
+    activities.push(
+      { title: "Contracts Uploaded", desc: `${totalContracts} files uploaded for analysis`, time: "Just now", icon: <UploadCloud size={16} className="text-white" />, color: "bg-blue-600" },
+      { title: "Analysis Completed", desc: `${contradictionsFound} contradictions detected successfully`, time: "Just now", icon: <CheckCircle2 size={16} className="text-white" />, color: "bg-green-500" }
+    );
+  }
+  if (savedReports.length > 0) {
+    savedReports.slice(0, 3).forEach((r) => {
+      activities.push({
+        title: `Report Generated`,
+        desc: `${r.name} (${r.contradictions} contradictions)`,
+        time: `${r.date} ${r.time || ''}`.trim(),
+        icon: <FileDown size={16} className="text-white" />,
+        color: "bg-indigo-500"
+      });
+    });
+  }
 
   const getRiskColor = (risk) => {
     if (risk === "HIGH") return "bg-red-100 text-red-600";
@@ -55,7 +107,8 @@ export default function DashboardHome({ globalResults }) {
         </div>
       </div>
 
-      <div className="grid grid-cols-4 gap-6 mb-8">
+      {/* KPI Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
         {kpis.map((kpi, idx) => (
           <div key={idx} className="bg-white dark:bg-[#1e293b] p-6 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm flex items-start gap-4">
             <div className={`p-4 rounded-lg ${kpi.bg}`}>
@@ -70,28 +123,32 @@ export default function DashboardHome({ globalResults }) {
         ))}
       </div>
 
-      <div className="grid grid-cols-3 gap-8">
-        <div className="col-span-2">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* Recent Analysis / Reports */}
+        <div className="lg:col-span-2">
           <div className="flex justify-between items-end mb-4">
-            <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100">Recent Analysis Results</h3>
-            {results.length > 0 && (
+            <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100">
+              {results.length > 0 ? "Recent Analysis Results" : "Recent Reports & Analysis"}
+            </h3>
+            {results.length > 0 ? (
               <button onClick={() => navigate("/results")} className="text-sm font-medium text-blue-600 hover:underline flex items-center">
                 View All Results <ChevronRight size={16} />
               </button>
-            )}
+            ) : savedReports.length > 0 ? (
+              <button onClick={() => navigate("/reports")} className="text-sm font-medium text-blue-600 hover:underline flex items-center">
+                View All Reports <ChevronRight size={16} />
+              </button>
+            ) : null}
           </div>
-          <div className="bg-white dark:bg-[#1e293b] rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 divide-y divide-slate-100 overflow-hidden">
-            {results.length === 0 ? (
-              <div className="p-8 text-center text-slate-500">
-                No contracts analyzed yet. Go to <button onClick={() => navigate("/upload")} className="text-blue-600 hover:underline">Upload Contracts</button> to get started.
-              </div>
-            ) : (
+
+          <div className="bg-white dark:bg-[#1e293b] rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 divide-y divide-slate-100 dark:divide-slate-800 overflow-hidden">
+            {results.length > 0 ? (
               results.slice(0, 5).map((item, idx) => (
-                <div key={idx} className="p-5 flex items-center justify-between hover:bg-slate-50 dark:bg-slate-950 transition-colors">
+                <div key={idx} className="p-5 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
                   <div className="flex-1 pr-4">
                     <h4 className="font-bold text-slate-800 dark:text-slate-100 mb-2 truncate" title={item.issue}>{item.issue || "Contradiction Detected"}</h4>
                     <div className="flex items-center gap-2 text-xs text-slate-500 font-medium">
-                      <span>Compared Clauses</span>
+                      <span>{item.filename1 || "Contract A"} vs {item.filename2 || "Contract B"}</span>
                     </div>
                   </div>
                   
@@ -99,7 +156,7 @@ export default function DashboardHome({ globalResults }) {
                     <span className={`text-[10px] font-bold px-3 py-1 rounded-full ${getRiskColor(item.risk_level)}`}>
                       {item.risk_level} RISK
                     </span>
-                    <p className="text-xs font-medium text-slate-500 mt-3">Similarity: {item.similarity}</p>
+                    <p className="text-xs font-medium text-slate-500 mt-2">Similarity: {item.similarity}</p>
                   </div>
 
                   <div className="w-28 text-xs font-medium text-slate-500">
@@ -115,24 +172,59 @@ export default function DashboardHome({ globalResults }) {
                   </div>
                 </div>
               ))
+            ) : savedReports.length > 0 ? (
+              savedReports.slice(0, 5).map((rep) => (
+                <div key={rep.id} className="p-5 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                  <div className="flex-1 pr-4">
+                    <h4 className="font-bold text-slate-800 dark:text-slate-100 mb-1 truncate">{rep.name}</h4>
+                    <p className="text-xs text-slate-500 truncate max-w-sm">{rep.files}</p>
+                  </div>
+                  
+                  <div className="w-32">
+                    <div className="flex items-center gap-1.5 text-xs font-semibold">
+                      {rep.risk?.high > 0 && <span className="text-red-500">{rep.risk.high} High</span>}
+                      {rep.risk?.medium > 0 && <span className="text-orange-500">{rep.risk.medium} Med</span>}
+                      {rep.risk?.low > 0 && <span className="text-emerald-500">{rep.risk.low} Low</span>}
+                    </div>
+                    <p className="text-xs text-slate-400 mt-1">{rep.contradictions} Contradictions</p>
+                  </div>
+
+                  <div className="w-28 text-xs font-medium text-slate-500">
+                    <div className="flex items-center gap-2">
+                      <Calendar size={14} /> {rep.date}
+                    </div>
+                  </div>
+
+                  <div>
+                    <button onClick={() => navigate("/reports")} className="px-4 py-2 border border-blue-200 text-blue-600 font-medium text-xs rounded-lg hover:bg-blue-50 transition-colors">
+                      View Report
+                    </button>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="p-8 text-center text-slate-500">
+                No contracts analyzed yet. Go to <button onClick={() => navigate("/upload")} className="text-blue-600 hover:underline">Upload Contracts</button> to get started.
+              </div>
             )}
           </div>
         </div>
 
+        {/* Right Column: Risk Distribution & Activity */}
         <div className="space-y-8">
           <div className="bg-white dark:bg-[#1e293b] p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
             <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 mb-6">Risk Distribution</h3>
-            {results.length === 0 ? (
+            {pieData.length === 0 ? (
               <p className="text-sm text-slate-500 text-center py-8">No data to display</p>
             ) : (
               <div className="flex items-center gap-4">
                 <div className="w-32 h-32 relative">
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
-                      <Pie data={pieData.length > 0 ? pieData : [{name: "None", value: 1, color: "#cbd5e1"}]} cx="50%" cy="50%" innerRadius={40} outerRadius={60} paddingAngle={2} dataKey="value">
-                        {pieData.length > 0 ? pieData.map((entry, index) => (
+                      <Pie data={pieData} cx="50%" cy="50%" innerRadius={40} outerRadius={60} paddingAngle={2} dataKey="value">
+                        {pieData.map((entry, index) => (
                           <Cell key={`cell-${index}`} fill={entry.color} />
-                        )) : <Cell fill="#cbd5e1" />}
+                        ))}
                       </Pie>
                       <Tooltip />
                     </PieChart>
