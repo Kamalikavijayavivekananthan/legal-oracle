@@ -17,7 +17,7 @@ function UploadContracts() {
 
     try {
       const response = await axios.post(
-        "http://127.0.0.1:8000/upload-contracts",
+        "/api-backend/upload-contracts",
         formData
       );
 
