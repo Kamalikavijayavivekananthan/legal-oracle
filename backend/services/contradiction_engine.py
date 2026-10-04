@@ -1,69 +1,90 @@
 import re
-import pickle
-from pathlib import Path
-
-import numpy as np
-from sentence_transformers import SentenceTransformer
 
 from services.similarity_engine import compare_clauses
 
 
-# ---------------------------------------------------------
-# Load trained contradiction classifier
-# ---------------------------------------------------------
+TOPIC_GROUPS = {
+    "payment": [
+        "payment",
+        "payments",
+        "invoice",
+        "invoices",
+        "pay",
+        "paid",
+        "settled",
+        "settlement",
+    ],
+    "liability": [
+        "liability",
+        "liable",
+        "damages",
+        "damage",
+        "loss",
+        "losses",
+    ],
+    "termination": [
+        "termination",
+        "terminate",
+        "terminated",
+        "cancellation",
+        "cancel",
+    ],
+    "delivery": [
+        "delivery",
+        "deliver",
+        "delivered",
+        "shipment",
+        "shipping",
+    ],
+    "assignment": [
+        "assign",
+        "assigned",
+        "assignment",
+        "transfer",
+        "transferred",
+    ],
+    "confidentiality": [
+        "confidential",
+        "confidentiality",
+        "disclosure",
+        "disclose",
+    ],
+}
 
-MODEL_PATH = (
-    Path(__file__).resolve().parent.parent
-    / "models"
-    / "contradiction_classifier.pkl"
-)
-
-with open(MODEL_PATH, "rb") as f:
-    model_data = pickle.load(f)
-
-classifier = model_data["classifier"]
-
-encoder = SentenceTransformer("all-MiniLM-L6-v2")
-
-
-# ---------------------------------------------------------
-# Extract numbers
-# ---------------------------------------------------------
 
 def extract_numbers(text):
-    numbers = re.findall(r"\b\d+(?:\.\d+)?\b", text)
-    return numbers
+    return re.findall(r"\b\d+(?:\.\d+)?\b", text)
 
 
-# ---------------------------------------------------------
-# ML contradiction prediction
-# ---------------------------------------------------------
+def get_topics(text):
+    text = text.lower()
+    topics = set()
 
-def predict_contradiction(clause1, clause2):
+    for topic, keywords in TOPIC_GROUPS.items():
+        for keyword in keywords:
+            if re.search(r"\b" + re.escape(keyword) + r"\b", text):
+                topics.add(topic)
+                break
 
-    embeddings = encoder.encode([clause1, clause2])
-
-    emb1 = embeddings[0]
-    emb2 = embeddings[1]
-
-    features = np.concatenate(
-        [
-            emb1,
-            emb2,
-            np.abs(emb1 - emb2)
-        ]
-    ).reshape(1, -1)
-
-    prediction = classifier.predict(features)[0]
-
-    probability = classifier.predict_proba(features)[0][1]
-
-    return int(prediction), round(float(probability), 3)
+    return topics
 
 
-# ---------------------------------------------------------
-# Main contradiction detector
-# ---------------------------------------------------------
+def has_negation(text):
+    text = text.lower()
+
+    patterns = [
+        r"\bnot\b",
+        r"\bno\b",
+        r"\bnever\b",
+        r"\bneither\b",
+        r"\bshall not\b",
+        r"\bmay not\b",
+        r"\bcannot\b",
+        r"\bprohibited\b",
+    ]
+
+    return any(re.search(pattern, text) for pattern in patterns)
+
 
 def detect_contradictions(clauses1, clauses2):
 
@@ -73,7 +94,6 @@ def detect_contradictions(clauses1, clauses2):
     for clause1 in clauses1:
         for clause2 in clauses2:
 
-            # Skip very short clauses
             if len(clause1.split()) < 4 or len(clause2.split()) < 4:
                 continue
 
@@ -84,78 +104,48 @@ def detect_contradictions(clauses1, clauses2):
 
             seen_pairs.add(pair_key)
 
-            # Semantic similarity
-            similarity = compare_clauses(
-                clause1,
-                clause2
-            )
+            similarity = compare_clauses(clause1, clause2)
 
-            # ML prediction
-            prediction, probability = predict_contradiction(
-                clause1,
-                clause2
-            )
-
-            # Numbers
             nums1 = extract_numbers(clause1)
             nums2 = extract_numbers(clause2)
 
+            topics1 = get_topics(clause1)
+            topics2 = get_topics(clause2)
+
+            shared_topics = topics1.intersection(topics2)
+
             issue = None
 
-            # -------------------------------------------------
-            # ML contradiction
-            # -------------------------------------------------
-            #
-            # Require reasonable semantic similarity.
-            # This prevents unrelated clauses from being
-            # classified as contradictions.
-            #
-
-            if prediction == 1 and similarity >= 0.65:
-
-                if nums1 != nums2 and nums1 and nums2:
-                    issue = (
-                        "ML contradiction detected with "
-                        "different numeric values"
-                    )
-                else:
-                    issue = (
-                        "ML contradiction detected: clauses "
-                        "may contain conflicting rules"
-                    )
-
-            # -------------------------------------------------
-            # Numeric fallback
-            # -------------------------------------------------
-            #
-            # Only use numeric contradiction when the clauses
-            # are strongly semantically related.
-            #
-
-            elif (
-                similarity >= 0.65
+            # Same legal/business topic + different numeric values
+            if (
+                shared_topics
                 and nums1
                 and nums2
                 and nums1 != nums2
             ):
-
                 issue = (
                     "Numeric contradiction: same clause topic "
                     "but different values"
                 )
 
-            # -------------------------------------------------
-            # Add result
-            # -------------------------------------------------
+            # Same topic + opposite permission/prohibition language
+            elif shared_topics:
+                neg1 = has_negation(clause1)
+                neg2 = has_negation(clause2)
+
+                if neg1 != neg2:
+                    issue = (
+                        "Potential contradiction: related clauses "
+                        "contain opposite permission or prohibition terms"
+                    )
 
             if issue:
-
                 contradictions.append({
                     "clause1": clause1,
                     "clause2": clause2,
                     "similarity": similarity,
-                    "contradiction_probability": probability,
-                    "issue": issue
+                    "contradiction_probability": None,
+                    "issue": issue,
                 })
 
     return contradictions
