@@ -4,3 +4,17 @@ node_modules/
 __pycache__/
 *.pyc
 dist/
+# Local contract files
+contracts/
+backend/contracts/
+
+# Generated reports
+legal_report.pdf
+backend/legal_report.pdf
+
+# Dataset / model artifacts
+backend/data/
+backend/models/
+
+# Python local files
+*.pkl
