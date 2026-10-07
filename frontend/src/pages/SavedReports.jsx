@@ -16,30 +16,49 @@ import {
   Star,
 } from "lucide-react";
 import UserHeader from "../components/UserHeader";
+import { useUser } from "../context/UserContext";
+import { getUserData, setUserData } from "../utils/userStorage";
 
 const ITEMS_PER_PAGE = 6;
 
 export default function SavedReports() {
+  const { userKey } = useUser();
   const [pinned, setPinned] = useState([]);
   const [search, setSearch] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
 
-  // Load pinned reports from localStorage
+  // Load pinned reports from user storage
   useEffect(() => {
     const load = () => {
-      const stored = JSON.parse(localStorage.getItem("pinnedReports") || "[]");
-      setPinned(stored);
+      if (!userKey) {
+        setPinned([]);
+        return;
+      }
+      const stored = getUserData(userKey, "pinned_reports", []);
+      setPinned(stored || []);
     };
     load();
+
+    const handleCustomEvent = (e) => {
+      if (e.detail?.userKey === userKey && e.detail?.itemKey === "pinned_reports") {
+        setPinned(e.detail.value || []);
+      }
+    };
+
     window.addEventListener("storage", load);
-    return () => window.removeEventListener("storage", load);
-  }, []);
+    window.addEventListener("legaloracle_user_data_changed", handleCustomEvent);
+    return () => {
+      window.removeEventListener("storage", load);
+      window.removeEventListener("legaloracle_user_data_changed", handleCustomEvent);
+    };
+  }, [userKey]);
 
   // Remove from saved
   const handleUnpin = (id) => {
+    if (!userKey) return;
     const updated = pinned.filter((r) => r.id !== id);
     setPinned(updated);
-    localStorage.setItem("pinnedReports", JSON.stringify(updated));
+    setUserData(userKey, "pinned_reports", updated);
   };
 
   // Filtered list

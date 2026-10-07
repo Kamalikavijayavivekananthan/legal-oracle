@@ -6,33 +6,47 @@ import {
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import { useNavigate } from "react-router-dom";
 import UserHeader from "../components/UserHeader";
+import { useUser } from "../context/UserContext";
+import { getUserData } from "../utils/userStorage";
 
 export default function DashboardHome({ globalResults }) {
   const navigate = useNavigate();
+  const { userKey } = useUser();
   const [savedReports, setSavedReports] = useState([]);
 
-  // Load saved reports from localStorage and listen to updates
+  // Load saved reports from user-scoped storage and listen to updates
   useEffect(() => {
     const loadReports = () => {
-      try {
-        const stored = JSON.parse(localStorage.getItem("savedReports") || "[]");
-        setSavedReports(stored);
-      } catch (e) {
+      if (!userKey) {
         setSavedReports([]);
+        return;
       }
+      const stored = getUserData(userKey, "saved_reports", []);
+      setSavedReports(stored || []);
     };
 
     loadReports();
+
+    const handleCustomEvent = (e) => {
+      if (e.detail?.userKey === userKey && e.detail?.itemKey === "saved_reports") {
+        setSavedReports(e.detail.value || []);
+      }
+    };
+
     window.addEventListener("storage", loadReports);
-    return () => window.removeEventListener("storage", loadReports);
-  }, []);
+    window.addEventListener("legaloracle_user_data_changed", handleCustomEvent);
+    return () => {
+      window.removeEventListener("storage", loadReports);
+      window.removeEventListener("legaloracle_user_data_changed", handleCustomEvent);
+    };
+  }, [userKey]);
 
   // Compute stats from active analysis results
   const results = globalResults?.results || [];
   
   // Total contracts analyzed
   const globalContracts = globalResults?.total_contracts || 0;
-  const reportsContracts = savedReports.reduce((acc, r) => acc + (Number(r.contracts) || 2), 0);
+  const reportsContracts = savedReports.reduce((acc, r) => acc + (Number(r.contracts) || 0), 0);
   const totalContracts = globalContracts > 0 ? globalContracts : reportsContracts;
 
   // Total contradictions found
@@ -54,7 +68,7 @@ export default function DashboardHome({ globalResults }) {
   const lowRiskCount    = results.length > 0 ? resultsLow  : reportsLow;
 
   // Reports generated count
-  const reportsGenerated = Math.max(savedReports.length, globalResults ? 1 : 0);
+  const reportsGenerated = savedReports.length > 0 ? savedReports.length : (globalResults ? 1 : 0);
 
   const kpis = [
     { title: "Contracts Analyzed", value: totalContracts, subtitle: "Total uploaded contracts", icon: <FileText size={24} className="text-blue-600" />, bg: "bg-blue-50" },

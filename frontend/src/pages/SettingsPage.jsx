@@ -12,6 +12,7 @@ import UserHeader from "../components/UserHeader";
 import { useTheme } from "../context/ThemeContext";
 import { useLanguage } from "../context/LanguageContext";
 import { useUser } from "../context/UserContext";
+import { getUserData, setUserData, findRegisteredAccount, saveRegisteredAccount } from "../utils/userStorage";
 
 // ── Defaults ─────────────────────────────────────────────────────────────────
 const DEFAULT_PROFILE    = { fullName: "", email: "", role: "Legal Team Member", phone: "", company: "", bio: "" };
@@ -208,6 +209,7 @@ function ProfileSection({ profile, appearance, save }) {
 }
 
 function SecuritySection({ showToast }) {
+  const { user } = useUser();
   const [sec, setSec] = useState({ current: "", newPw: "", confirm: "" });
   const [showPw, setShowPw] = useState({ current: false, newPw: false, confirm: false });
 
@@ -252,10 +254,31 @@ function SecuritySection({ showToast }) {
             showToast("Please fill in all password fields!");
             return;
           }
+          const existingAccount = findRegisteredAccount(user?.email) || findRegisteredAccount(user?.name);
+          const currentExpected = existingAccount?.password || user?.password || "password123";
+          
+          if (sec.current !== currentExpected) {
+            showToast("Current password is incorrect!");
+            return;
+          }
+
+          if (sec.newPw.length < 6) {
+            showToast("New password must be at least 6 characters!");
+            return;
+          }
+
           if (sec.newPw !== sec.confirm) {
             showToast("Passwords do not match!");
             return;
           }
+
+          if (user) {
+            saveRegisteredAccount({
+              ...user,
+              password: sec.newPw
+            });
+          }
+
           showToast("Password updated successfully!");
           setSec({ current: "", newPw: "", confirm: "" });
         }}
@@ -824,13 +847,15 @@ function RiskSettingsSection({ showToast }) {
 
 // ── Main Component ────────────────────────────────────────────────────────────
 export default function SettingsPage() {
-  const { user } = useUser();
+  const { user, userKey } = useUser();
   const [activeSection, setActiveSection] = useState("profile");
   const [toast, setToast] = useState("");
 
   const [profile,    setProfile]    = useState(() => {
-    const saved = JSON.parse(localStorage.getItem("settings_profile") || "null");
-    if (saved && (saved.fullName || saved.email)) return saved;
+    if (userKey) {
+      const saved = getUserData(userKey, "profile", null);
+      if (saved && (saved.fullName || saved.email)) return saved;
+    }
     if (user) {
       return {
         fullName: user.fullName || user.name || "",
@@ -843,10 +868,11 @@ export default function SettingsPage() {
     }
     return DEFAULT_PROFILE;
   });
-  const [prefs,      setPrefs]      = useState(() => JSON.parse(localStorage.getItem("settings_prefs")      || "null") || DEFAULT_PREFS);
-  const [appearance, setAppearance] = useState(() => JSON.parse(localStorage.getItem("settings_appearance") || "null") || DEFAULT_APPEARANCE);
-  const [notifs,     setNotifs]     = useState(() => JSON.parse(localStorage.getItem("settings_notifs")     || "null") || DEFAULT_NOTIFS);
-  const [analysis,   setAnalysis]   = useState(() => JSON.parse(localStorage.getItem("settings_analysis")   || "null") || DEFAULT_ANALYSIS);
+
+  const [prefs,      setPrefs]      = useState(() => (userKey ? getUserData(userKey, "settings_prefs", null) : null) || DEFAULT_PREFS);
+  const [appearance, setAppearance] = useState(() => (userKey ? getUserData(userKey, "settings_appearance", null) : null) || DEFAULT_APPEARANCE);
+  const [notifs,     setNotifs]     = useState(() => (userKey ? getUserData(userKey, "settings_notifs", null) : null) || DEFAULT_NOTIFS);
+  const [analysis,   setAnalysis]   = useState(() => (userKey ? getUserData(userKey, "settings_analysis", null) : null) || DEFAULT_ANALYSIS);
 
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(""), 2500); };
 
@@ -859,7 +885,12 @@ export default function SettingsPage() {
       settings_analysis:   setAnalysis,
     };
     setterMap[key]?.(value);
-    localStorage.setItem(key, JSON.stringify(value));
+    if (userKey) {
+      setUserData(userKey, key, value);
+      if (key === "settings_profile") {
+        setUserData(userKey, "profile", value);
+      }
+    }
     showToast(msg);
   };
 

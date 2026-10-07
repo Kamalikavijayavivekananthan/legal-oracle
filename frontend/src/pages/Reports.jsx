@@ -16,30 +16,51 @@ import {
   BookmarkCheck
 } from "lucide-react";
 import UserHeader from "../components/UserHeader";
+import { useUser } from "../context/UserContext";
+import { getUserData, setUserData } from "../utils/userStorage";
 
 const ITEMS_PER_PAGE = 6;
 
 export default function Reports() {
+  const { userKey } = useUser();
   const [reports, setReports] = useState([]);
   const [pinned, setPinned] = useState([]);
   const [search, setSearch] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
 
-  // Load saved reports from localStorage on mount and when storage changes
+  // Load saved reports from user storage on mount and when storage changes
   useEffect(() => {
     const load = () => {
-      const stored = JSON.parse(localStorage.getItem("savedReports") || "[]");
-      setReports(stored);
-      const pinnedStored = JSON.parse(localStorage.getItem("pinnedReports") || "[]");
-      setPinned(pinnedStored);
+      if (!userKey) {
+        setReports([]);
+        setPinned([]);
+        return;
+      }
+      const stored = getUserData(userKey, "saved_reports", []);
+      setReports(stored || []);
+      const pinnedStored = getUserData(userKey, "pinned_reports", []);
+      setPinned(pinnedStored || []);
     };
     load();
+
+    const handleCustomEvent = (e) => {
+      if (e.detail?.userKey === userKey) {
+        if (e.detail?.itemKey === "saved_reports") setReports(e.detail.value || []);
+        if (e.detail?.itemKey === "pinned_reports") setPinned(e.detail.value || []);
+      }
+    };
+
     window.addEventListener("storage", load);
-    return () => window.removeEventListener("storage", load);
-  }, []);
+    window.addEventListener("legaloracle_user_data_changed", handleCustomEvent);
+    return () => {
+      window.removeEventListener("storage", load);
+      window.removeEventListener("legaloracle_user_data_changed", handleCustomEvent);
+    };
+  }, [userKey]);
 
   // Toggle pin/save to Saved Reports page
   const handlePin = (report) => {
+    if (!userKey) return;
     const alreadyPinned = pinned.some((r) => r.id === report.id);
     let updated;
     if (alreadyPinned) {
@@ -48,14 +69,15 @@ export default function Reports() {
       updated = [report, ...pinned];
     }
     setPinned(updated);
-    localStorage.setItem("pinnedReports", JSON.stringify(updated));
+    setUserData(userKey, "pinned_reports", updated);
   };
 
   // Delete a report
   const handleDelete = (id) => {
+    if (!userKey) return;
     const updated = reports.filter((r) => r.id !== id);
     setReports(updated);
-    localStorage.setItem("savedReports", JSON.stringify(updated));
+    setUserData(userKey, "saved_reports", updated);
   };
 
   // Filtered list

@@ -1,91 +1,115 @@
 import { createContext, useContext, useState } from "react";
+import { getUserKey, getUserData, setUserData, saveRegisteredAccount, findRegisteredAccount } from "../utils/userStorage";
 
 const UserContext = createContext(null);
 
 export function UserProvider({ children }) {
   const [user, setUser] = useState(() => {
     try {
-      const savedUser = JSON.parse(localStorage.getItem("legaloracle_user") || "null");
-      const savedProfile = JSON.parse(localStorage.getItem("settings_profile") || "null");
-      
-      if (savedProfile && (savedProfile.fullName || savedProfile.email)) {
-        return {
-          name: savedProfile.fullName || savedUser?.name || "User",
-          fullName: savedProfile.fullName || savedUser?.name || "User",
-          email: savedProfile.email || savedUser?.email || "",
-          role: savedProfile.role || savedUser?.role || "Legal Team Member",
-          phone: savedProfile.phone || savedUser?.phone || "",
-          company: savedProfile.company || savedUser?.company || "",
-          experience: savedProfile.experience || savedUser?.experience || "",
-          bio: savedProfile.bio || savedUser?.bio || "",
-        };
-      }
-      
+      // First check session storage for active browser session
+      const sessionUser = JSON.parse(sessionStorage.getItem("legaloracle_active_session") || "null");
+      const rememberedUser = JSON.parse(localStorage.getItem("legaloracle_remember_user") || "null");
+      const savedUser = sessionUser || rememberedUser;
+
       if (savedUser) {
+        const key = getUserKey(savedUser);
+        const userProfile = getUserData(key, "profile", null);
+        const account = findRegisteredAccount(key);
+        
         return {
+          ...account,
+          ...userProfile,
           ...savedUser,
-          fullName: savedUser.fullName || savedUser.name || "User",
           name: savedUser.name || savedUser.fullName || "User",
-          role: savedUser.role || "Legal Team Member",
-          company: savedUser.company || "",
-          experience: savedUser.experience || "",
+          fullName: savedUser.fullName || savedUser.name || "User",
+          email: savedUser.email || account?.email || "",
+          role: userProfile?.role || savedUser.role || account?.role || "Legal Team Member",
+          company: userProfile?.company || savedUser.company || account?.company || "",
+          experience: userProfile?.experience || savedUser.experience || account?.experience || "",
+          phone: userProfile?.phone || savedUser.phone || account?.phone || "",
+          bio: userProfile?.bio || savedUser.bio || account?.bio || "",
+          userKey: key,
         };
       }
     } catch (e) {
-      console.error("Error reading user from localStorage", e);
+      console.error("Error initializing user from storage", e);
     }
-    return {
-      name: "Kamalika",
-      fullName: "Kamalika",
-      email: "kamalikavijay2803@gmail.com",
-      role: "Legal Team Member",
-      phone: "",
-      company: "",
-      experience: "",
-      bio: "",
-    };
+    return null;
   });
 
-  const login = (userData) => {
-    const formattedUser = {
-      ...userData,
-      name: userData.name || userData.fullName || "User",
-      fullName: userData.fullName || userData.name || "User",
-      role: userData.role || "Legal Team Member",
-      company: userData.company || "",
-      experience: userData.experience || "",
-    };
-    localStorage.setItem("legaloracle_user", JSON.stringify(formattedUser));
+  const userKey = user ? getUserKey(user) : null;
 
-    const savedProfile = JSON.parse(localStorage.getItem("settings_profile") || "{}");
-    const updatedProfile = {
-      ...savedProfile,
-      fullName: formattedUser.name,
-      email: formattedUser.email || savedProfile.email || "",
-      role: formattedUser.role || savedProfile.role || "Legal Team Member",
-      company: formattedUser.company || savedProfile.company || "",
-      experience: formattedUser.experience || savedProfile.experience || "",
+  const login = (userData, rememberMe = false) => {
+    const rawKey = getUserKey(userData);
+    const existingAccount = findRegisteredAccount(rawKey) || findRegisteredAccount(userData.email) || findRegisteredAccount(userData.name);
+    const existingProfile = getUserData(rawKey, "profile", null);
+
+    const formattedUser = {
+      ...existingAccount,
+      ...existingProfile,
+      ...userData,
+      name: userData.name || userData.fullName || existingAccount?.name || "User",
+      fullName: userData.fullName || userData.name || existingAccount?.fullName || "User",
+      email: userData.email || existingAccount?.email || "",
+      role: userData.role || existingProfile?.role || existingAccount?.role || "Legal Team Member",
+      company: userData.company || existingProfile?.company || existingAccount?.company || "",
+      experience: userData.experience || existingProfile?.experience || existingAccount?.experience || "",
+      phone: userData.phone || existingProfile?.phone || existingAccount?.phone || "",
+      bio: userData.bio || existingProfile?.bio || existingAccount?.bio || "",
+      userKey: rawKey,
     };
-    localStorage.setItem("settings_profile", JSON.stringify(updatedProfile));
+
+    // Save to active session (session storage keeps user logged in during current browsing session)
+    sessionStorage.setItem("legaloracle_active_session", JSON.stringify(formattedUser));
+
+    if (rememberMe) {
+      localStorage.setItem("legaloracle_remember_user", JSON.stringify(formattedUser));
+    } else {
+      localStorage.removeItem("legaloracle_remember_user");
+    }
+
+    localStorage.setItem("legaloracle_active_user_key", rawKey);
+
+    // Save/update account in registry
+    saveRegisteredAccount(formattedUser);
+
+    // Persist scoped profile
+    setUserData(rawKey, "profile", {
+      fullName: formattedUser.fullName,
+      email: formattedUser.email,
+      role: formattedUser.role,
+      phone: formattedUser.phone,
+      company: formattedUser.company,
+      experience: formattedUser.experience,
+      bio: formattedUser.bio,
+    });
 
     setUser(formattedUser);
+    return formattedUser;
   };
 
   const updateUser = (updatedFields) => {
     setUser((prev) => {
-      const name = updatedFields.fullName || updatedFields.name || prev?.name || prev?.fullName || "User";
+      if (!prev) return null;
+      const key = getUserKey(prev);
+      const name = updatedFields.fullName || updatedFields.name || prev.name || prev.fullName || "User";
+      
       const updated = {
         ...prev,
         ...updatedFields,
         name: name,
         fullName: name,
-        role: updatedFields.role || prev?.role || "Legal Team Member",
+        role: updatedFields.role || prev.role || "Legal Team Member",
+        userKey: key,
       };
-      
-      localStorage.setItem("legaloracle_user", JSON.stringify(updated));
+
+      sessionStorage.setItem("legaloracle_active_session", JSON.stringify(updated));
+      if (localStorage.getItem("legaloracle_remember_user")) {
+        localStorage.setItem("legaloracle_remember_user", JSON.stringify(updated));
+      }
 
       const profileData = {
-        fullName: updated.name,
+        fullName: updated.fullName,
         email: updated.email || "",
         role: updated.role,
         phone: updated.phone || "",
@@ -93,19 +117,43 @@ export function UserProvider({ children }) {
         experience: updated.experience || "",
         bio: updated.bio || "",
       };
-      localStorage.setItem("settings_profile", JSON.stringify(profileData));
+
+      setUserData(key, "profile", profileData);
+      saveRegisteredAccount(updated);
 
       return updated;
     });
   };
 
   const logout = () => {
+    sessionStorage.removeItem("legaloracle_active_session");
+    localStorage.removeItem("legaloracle_remember_user");
     localStorage.removeItem("legaloracle_user");
+    localStorage.removeItem("legaloracle_active_user_key");
+    localStorage.removeItem("isLoggedIn");
     setUser(null);
   };
 
+  const getScopedData = (itemKey, defaultValue = null) => {
+    if (!userKey) return defaultValue;
+    return getUserData(userKey, itemKey, defaultValue);
+  };
+
+  const setScopedData = (itemKey, value) => {
+    if (!userKey) return;
+    setUserData(userKey, itemKey, value);
+  };
+
   return (
-    <UserContext.Provider value={{ user, login, updateUser, logout }}>
+    <UserContext.Provider value={{ 
+      user, 
+      userKey, 
+      login, 
+      updateUser, 
+      logout,
+      getScopedData,
+      setScopedData
+    }}>
       {children}
     </UserContext.Provider>
   );

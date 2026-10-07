@@ -2,19 +2,22 @@ import { useState, useEffect } from "react";
 import { Mail, Lock, ArrowRight, CheckCircle2, AlertCircle, User, Eye, EyeOff, Building2, Briefcase } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useUser } from "../context/UserContext";
+import { findRegisteredAccount, saveRegisteredAccount } from "../utils/userStorage";
 
 export default function LoginPage({ onLogin }) {
   const [isRegister, setIsRegister] = useState(false);
   const [username, setUsername] = useState("");
   const [company, setCompany]   = useState("");
   const [experience, setExperience] = useState("");
-  const [email, setEmail]       = useState("kamalikavijay2803@gmail.com");
-  const [password, setPassword] = useState("••••••••••••");
+  const [email, setEmail]       = useState("");
+  const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError]         = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
   const [showForm, setShowForm]   = useState(false);
   const navigate = useNavigate();
   const { login } = useUser();
@@ -26,20 +29,15 @@ export default function LoginPage({ onLogin }) {
   const handleToggleMode = (mode) => {
     setIsRegister(mode);
     setError("");
-    if (mode) {
-      // Switching to register -> clear prefilled demo values
-      if (password === "••••••••••••") setPassword("");
-      setConfirmPassword("");
-    } else {
-      // Switching to login
-      if (!password) setPassword("••••••••••••");
-      if (!email) setEmail("kamalikavijay2803@gmail.com");
-    }
+    setSuccessMessage("");
+    setPassword("");
+    setConfirmPassword("");
   };
 
   const handleSubmit = (e) => {
     e.preventDefault();
     setError("");
+    setSuccessMessage("");
 
     if (!username.trim()) {
       setError(isRegister ? "Please enter your full name." : "Please enter your username.");
@@ -73,18 +71,55 @@ export default function LoginPage({ onLogin }) {
     }
 
     setIsLoading(true);
-    setTimeout(() => {
-      login({
-        name: username,
-        fullName: username,
-        email: email,
-        company: isRegister ? company : "",
-        experience: isRegister ? experience : "",
+
+    if (isRegister) {
+      // Register account in registry
+      saveRegisteredAccount({
+        name: username.trim(),
+        fullName: username.trim(),
+        email: email.trim(),
+        company: company.trim(),
+        experience: experience.trim(),
+        password: password,
         role: "Legal Team Member",
       });
-      onLogin();
-      navigate("/");
-    }, 600);
+
+      setTimeout(() => {
+        setIsLoading(false);
+        setIsRegister(false); // Switch to Sign In mode
+        setPassword("");
+        setConfirmPassword("");
+        setSuccessMessage("Account created successfully! Please sign in with your password.");
+      }, 500);
+    } else {
+      setTimeout(() => {
+        const existingAccount = findRegisteredAccount(email.trim()) || findRegisteredAccount(username.trim());
+        
+        if (!existingAccount) {
+          setIsLoading(false);
+          setError("No account found with this email/username. Please register first.");
+          return;
+        }
+
+        const expectedPassword = existingAccount.password || "password123";
+        if (password !== expectedPassword) {
+          setIsLoading(false);
+          setError("Incorrect password! Please enter the correct password.");
+          return;
+        }
+
+        const userToLogin = {
+          ...existingAccount,
+          name: existingAccount.name || username.trim(),
+          fullName: existingAccount.fullName || username.trim(),
+          email: existingAccount.email || email.trim(),
+        };
+
+        login(userToLogin, rememberMe);
+        if (onLogin) onLogin();
+        navigate("/");
+      }, 500);
+    }
   };
 
   return (
@@ -246,7 +281,7 @@ export default function LoginPage({ onLogin }) {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     className="w-full bg-[#080e1a]/90 border border-slate-800 rounded-xl py-2.5 pl-10 pr-4 text-slate-100 placeholder-slate-500 text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all hover:border-slate-700 shadow-inner"
-                    placeholder="kamalikavijay2803@gmail.com"
+                    placeholder="name@lawfirm.com"
                   />
                 </div>
               </div>
@@ -327,11 +362,21 @@ export default function LoginPage({ onLogin }) {
                   <input 
                     id="remember-me" 
                     type="checkbox" 
+                    checked={rememberMe}
+                    onChange={(e) => setRememberMe(e.target.checked)}
                     className="h-4 w-4 rounded border-slate-700 bg-slate-800 text-blue-600 focus:ring-blue-500/50 focus:ring-offset-slate-950 cursor-pointer" 
                   />
                   <label htmlFor="remember-me" className="ml-2.5 block text-xs text-slate-400 cursor-pointer select-none">
                     Keep me signed in
                   </label>
+                </div>
+              )}
+
+              {/* Success Alert */}
+              {successMessage && (
+                <div className="flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/30 rounded-xl px-3.5 py-2.5 text-emerald-400 text-xs">
+                  <CheckCircle2 size={15} className="shrink-0 text-emerald-400" />
+                  {successMessage}
                 </div>
               )}
 

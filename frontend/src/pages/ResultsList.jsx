@@ -3,9 +3,12 @@ import { useNavigate } from "react-router-dom";
 import { Download, FileText, ShieldCheck, AlertTriangle, BarChart2, ChevronRight, Calendar, BrainCircuit, Lightbulb, Bell, ChevronDown, DollarSign, Clock, FileWarning, Scale, AlertCircle } from "lucide-react";
 import axios from "axios";
 import UserHeader from "../components/UserHeader";
+import { useUser } from "../context/UserContext";
+import { getUserData, setUserData } from "../utils/userStorage";
 
 export default function ResultsList({ globalResults }) {
   const navigate = useNavigate();
+  const { userKey } = useUser();
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [detailedExplanations, setDetailedExplanations] = useState({});
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
@@ -69,20 +72,22 @@ export default function ResultsList({ globalResults }) {
       link.click();
       link.parentNode.removeChild(link);
 
-      // Save report metadata to localStorage for Reports page
-      const filenames = [...new Set(results.flatMap(r => [r.filename1, r.filename2].filter(Boolean)))].join(', ');
-      const newReport = {
-        id: Date.now(),
-        name: reportName,
-        files: filenames || 'Contracts analyzed',
-        contracts: totalContracts,
-        contradictions: contradictionsFound,
-        risk: { high: highRiskCount, medium: mediumRiskCount, low: lowRiskCount },
-        date: now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
-        time: now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
-      };
-      const existing = JSON.parse(localStorage.getItem('savedReports') || '[]');
-      localStorage.setItem('savedReports', JSON.stringify([newReport, ...existing]));
+      // Save report metadata to user-scoped storage for Reports page
+      if (userKey) {
+        const filenames = [...new Set(results.flatMap(r => [r.filename1, r.filename2].filter(Boolean)))].join(', ');
+        const newReport = {
+          id: Date.now(),
+          name: reportName,
+          files: filenames || 'Contracts analyzed',
+          contracts: totalContracts,
+          contradictions: contradictionsFound,
+          risk: { high: highRiskCount, medium: mediumRiskCount, low: lowRiskCount },
+          date: now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
+          time: now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
+        };
+        const existing = getUserData(userKey, 'saved_reports', []);
+        setUserData(userKey, 'saved_reports', [newReport, ...(existing || [])]);
+      }
 
     } catch (error) {
       console.error(error);
